@@ -14,6 +14,14 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+# Local import with fallback for direct script execution
+try:
+    from transfer_model.utils import batch_rot2aa
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from transfer_model.utils import batch_rot2aa
+
 
 def _to_numpy(x):
     if torch.is_tensor(x):
@@ -24,9 +32,15 @@ def _to_numpy(x):
 def _reshape_pose(arr: np.ndarray) -> np.ndarray:
     arr = np.asarray(arr)
     if arr.ndim == 4 and arr.shape[-2:] == (3, 3):  # rotation matrices
-        return arr.reshape(arr.shape[0], -1)
+        flat = arr.reshape(-1, 3, 3)
+        aa = batch_rot2aa(torch.from_numpy(flat)).cpu().numpy()
+        return aa.reshape(arr.shape[0], arr.shape[1], 3)
     if arr.ndim == 3 and arr.shape[-1] == 3:  # axis-angle
-        return arr.reshape(arr.shape[0], -1)
+        return arr
+    if arr.ndim == 2 and arr.shape[-1] == 9:  # flattened rotmats
+        flat = arr.reshape(-1, 3, 3)
+        aa = batch_rot2aa(torch.from_numpy(flat)).cpu().numpy()
+        return aa.reshape(arr.shape[0], 3)
     if arr.ndim == 2:
         return arr
     return arr.reshape(arr.shape[0], -1)
@@ -52,6 +66,12 @@ def load_pkl(path: Path) -> Dict[str, np.ndarray]:
     out["expression"] = _to_numpy(get("expression"))
     out["joints_3d"] = _to_numpy(get("joints"))
     out["verts"] = _to_numpy(get("vertices"))
+
+    # Squeeze leading singleton batch dims for per-sample storage
+    for k, v in out.items():
+        if isinstance(v, np.ndarray) and v.shape[0] == 1:
+            out[k] = v[0]
+    return out
     return out
 
 
@@ -80,22 +100,32 @@ def save_npz_per_frame(pkl_folder: Path, out_folder: Path) -> None:
             entries.append(load_pkl(p))
 
         def stack(key):
-            return np.stack([np.array(e[key]).squeeze() for e in entries], axis=0)
+            return np.stack([np.array(e[key]) for e in entries], axis=0)
 
         verts = stack("verts")
         contact = np.zeros((verts.shape[0], verts.shape[1]), dtype=np.float32)
 
+        # Match downstream naming / shapes (axis-angle)
+        root_pose = stack("global_orient").reshape(len(entries), -1, 3)
+        body_pose = stack("body_pose").reshape(len(entries), -1, 3)
+        jaw_pose = stack("jaw_pose").reshape(len(entries), -1, 3)
+        leye_pose = stack("leye_pose").reshape(len(entries), -1, 3)
+        reye_pose = stack("reye_pose").reshape(len(entries), -1, 3)
+        lhand_pose = stack("left_hand_pose").reshape(len(entries), -1, 3)
+        rhand_pose = stack("right_hand_pose").reshape(len(entries), -1, 3)
+        trans = stack("transl").reshape(len(entries), -1, 3)
+
         np.savez(
             out_folder / f"{frame_id}.npz",
-            betas=stack("betas"),
-            body_pose=stack("body_pose"),
-            global_orient=stack("global_orient"),
-            transl=stack("transl"),
-            left_hand_pose=stack("left_hand_pose"),
-            right_hand_pose=stack("right_hand_pose"),
-            jaw_pose=stack("jaw_pose"),
-            leye_pose=stack("leye_pose"),
-            reye_pose=stack("reye_pose"),
+            betas=stack("betas")[..., :10],  # keep 10 betas
+            root_pose=root_pose[:, 0],      # (P,3)
+            body_pose=body_pose[:, :21],    # (P,21,3)
+            jaw_pose=jaw_pose[:, 0],        # (P,3)
+            leye_pose=leye_pose[:, 0],      # (P,3)
+            reye_pose=reye_pose[:, 0],      # (P,3)
+            lhand_pose=lhand_pose[:, :15],  # (P,15,3)
+            rhand_pose=rhand_pose[:, :15],  # (P,15,3)
+            trans=trans[:, 0],              # (P,3)
             expression=stack("expression"),
             joints_3d=stack("joints_3d"),
             verts=verts,

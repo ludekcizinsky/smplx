@@ -31,6 +31,26 @@ from .utils import (
 from .losses import build_loss
 
 
+def _get_output_item(output, key):
+    '''Helper to access outputs from smplx ModelOutput or dict'''
+    if isinstance(output, dict):
+        return output[key]
+    if hasattr(output, key):
+        return getattr(output, key)
+    return output[key]
+
+
+def _output_to_dict(output):
+    '''Convert ModelOutput/namedtuple to dict for downstream use'''
+    if isinstance(output, dict):
+        return output
+    if hasattr(output, '_asdict'):
+        return output._asdict()
+    if hasattr(output, '__dict__'):
+        return output.__dict__
+    raise TypeError(f'Unsupported output type: {type(output)}')
+
+
 def summary_closure(gt_vertices, var_dict, body_model, mask_ids=None):
     param_dict = {}
     for key, var in var_dict.items():
@@ -43,7 +63,7 @@ def summary_closure(gt_vertices, var_dict, body_model, mask_ids=None):
             param_dict[key] = var
     body_model_output = body_model(
         return_full_pose=True, get_skin=True, **param_dict)
-    est_vertices = body_model_output['vertices']
+    est_vertices = _get_output_item(body_model_output, 'vertices')
     if mask_ids is not None:
         est_vertices = est_vertices[:, mask_ids]
         gt_vertices = gt_vertices[:, mask_ids]
@@ -134,7 +154,7 @@ def build_edge_closure(
             optimizer.zero_grad()
 
         body_model_output = model_forward()
-        est_vertices = body_model_output['vertices']
+        est_vertices = _get_output_item(body_model_output, 'vertices')
 
         loss = edge_loss(est_vertices, gt_vertices)
         if backward:
@@ -181,7 +201,7 @@ def build_vertex_closure(
             optimizer.zero_grad()
 
         body_model_output = model_forward()
-        est_vertices = body_model_output['vertices']
+        est_vertices = _get_output_item(body_model_output, 'vertices')
 
         loss = vertex_loss(
             est_vertices[:, mask_ids] if mask_ids is not None else
@@ -390,7 +410,7 @@ def run_fitting(
 
     body_model_output = body_model(
         return_full_pose=True, get_skin=True, **param_dict)
-    var_dict.update(body_model_output)
+    var_dict.update(_output_to_dict(body_model_output))
     var_dict['faces'] = body_model.faces
 
     return var_dict

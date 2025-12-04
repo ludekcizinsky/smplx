@@ -84,19 +84,41 @@ def main() -> None:
         var_dict = run_fitting(
             exp_cfg, batch, body_model, def_matrix, mask_ids)
         paths = batch['paths']
+        batch_size = len(paths)
+
+        def slice_value(val, idx):
+            if torch.is_tensor(val):
+                val = val.detach().cpu()
+            if isinstance(val, np.ndarray):
+                pass
+            if hasattr(val, 'shape'):
+                try:
+                    if val.shape[0] == batch_size:
+                        return val[idx:idx + 1]
+                except Exception:
+                    return val
+            return val
+
+        def build_sample(var_dict, idx):
+            sample = {}
+            for k, v in var_dict.items():
+                sample[k] = slice_value(v, idx)
+            return sample
 
         for ii, path in enumerate(paths):
             _, fname = osp.split(path)
 
+            sample_dict = build_sample(var_dict, ii)
+
             output_path = osp.join(
                 output_folder, f'{osp.splitext(fname)[0]}.pkl')
             with open(output_path, 'wb') as f:
-                pickle.dump(var_dict, f)
+                pickle.dump(sample_dict, f)
 
             output_path = osp.join(
                 output_folder, f'{osp.splitext(fname)[0]}.obj')
             mesh = np_mesh_to_o3d(
-                var_dict['vertices'][ii], var_dict['faces'])
+                sample_dict['vertices'].squeeze(), sample_dict['faces'])
             o3d.io.write_triangle_mesh(output_path, mesh)
 
 

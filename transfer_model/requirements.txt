@@ -1,9 +1,9 @@
-numpy>=1.16.2
-torch>=1.0.1.post2
-dataclasses>=0.6
-pyrender>=0.1.23
+numpy
+torch
+dataclasses
+pyrender
 shapely
-trimesh>=2.37.6
+trimesh
 open3d
 smplx
 omegaconf

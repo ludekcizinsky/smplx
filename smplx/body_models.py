@@ -2343,11 +2343,13 @@ def build_layer(
             SMPLX, MANO or FLAME
     '''
 
+    print(f"Model path provided: {model_path} and model type: {model_type}")
     if osp.isdir(model_path):
         model_path = os.path.join(model_path, model_type)
     else:
         model_type = osp.basename(model_path).split('_')[0].lower()
 
+    print(f'Building layer for model type: {model_type}')
     if model_type.lower() == 'smpl':
         return SMPLLayer(model_path, **kwargs)
     elif model_type.lower() == 'smplh':

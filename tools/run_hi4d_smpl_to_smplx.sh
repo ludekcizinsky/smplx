@@ -4,14 +4,14 @@
 source /home/cizinsky/miniconda3/etc/profile.d/conda.sh
 
 ROOT="/home/cizinsky/smplx"
-SEQ_ROOT="/scratch/izar/cizinsky/ait_datasets/full/hi4d/pair15_1/pair15/fight15"
+SEQ_ROOT="/scratch/izar/cizinsky/ait_datasets/full/hi4d/pair19_2/piggyback19"
 SMPL_DIR="$SEQ_ROOT/smpl"
 SMPLX_BATCH_DIR="$SEQ_ROOT/fitted_smplx_batch"
 SMPLX_DIR="$SEQ_ROOT/smplx"
 OBJ_OUT="$SEQ_ROOT/smpl_to_smplx_meshes"
 CONFIG="$ROOT/config_files/hi4d_smpl2smplx.yaml"
-PREPROCESS_DIR="/scratch/izar/cizinsky/thesis/preprocessing/hi4d_pair15_fight/lhm"
-
+PREPROCESS_DIR="/scratch/izar/cizinsky/thesis/preprocessing/hi4d_pair19_piggyback/lhm"
+  
 cd "$ROOT"
 
 echo "Exporting SMPL npz frames to obj meshes..."

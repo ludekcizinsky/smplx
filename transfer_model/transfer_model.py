@@ -408,9 +408,12 @@ def run_fitting(
             # Simply pass the variable
             param_dict[key] = var
 
+    cached_transl = var_dict.get('transl')
     body_model_output = body_model(
         return_full_pose=True, get_skin=True, **param_dict)
     var_dict.update(_output_to_dict(body_model_output))
+    if var_dict.get('transl') is None:
+        var_dict['transl'] = cached_transl
     var_dict['faces'] = body_model.faces
 
     return var_dict

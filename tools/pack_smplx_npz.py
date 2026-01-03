@@ -1,9 +1,6 @@
-#!/usr/bin/env python3
-"""Group transfer_model SMPL-X .pkl outputs into per-frame .npz files."""
-
 from __future__ import annotations
 
-import argparse
+from dataclasses import dataclass
 import pickle
 import re
 from collections import defaultdict
@@ -13,6 +10,7 @@ from typing import Dict, List
 import numpy as np
 import torch
 from tqdm import tqdm
+import tyro
 
 # Local import with fallback for direct script execution
 try:
@@ -24,12 +22,16 @@ except ModuleNotFoundError:
 
 
 def _to_numpy(x):
+    if x is None:
+        return None
     if torch.is_tensor(x):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
 
 def _reshape_pose(arr: np.ndarray) -> np.ndarray:
+    if arr is None:
+        return None
     arr = np.asarray(arr)
     if arr.ndim == 4 and arr.shape[-2:] == (3, 3):  # rotation matrices
         flat = arr.reshape(-1, 3, 3)
@@ -53,7 +55,7 @@ def load_pkl(path: Path) -> Dict[str, np.ndarray]:
     def get(key, alt=None):
         return data[key] if key in data else data.get(alt)
 
-    out = {}
+    out = {"_path": str(path)}
     out["betas"] = _to_numpy(get("betas"))
     out["global_orient"] = _reshape_pose(_to_numpy(get("global_orient")))
     out["body_pose"] = _reshape_pose(_to_numpy(get("body_pose")))
@@ -72,8 +74,6 @@ def load_pkl(path: Path) -> Dict[str, np.ndarray]:
         if isinstance(v, np.ndarray) and v.shape[0] == 1:
             out[k] = v[0]
     return out
-    return out
-
 
 def group_by_frame(pkl_folder: Path) -> Dict[str, List[Path]]:
     frame_dict: Dict[str, List[Path]] = defaultdict(list)
@@ -86,7 +86,15 @@ def group_by_frame(pkl_folder: Path) -> Dict[str, List[Path]]:
     return frame_dict
 
 
-def save_npz_per_frame(pkl_folder: Path, out_folder: Path) -> None:
+def _infer_model_type(sample: Dict[str, np.ndarray]) -> str:
+    if sample.get("left_hand_pose") is not None or sample.get("right_hand_pose") is not None:
+        return "smplx"
+    if sample.get("jaw_pose") is not None or sample.get("expression") is not None:
+        return "smplx"
+    return "smpl"
+
+
+def save_npz_per_frame(pkl_folder: Path, out_folder: Path, model_type: str) -> None:
     frames = group_by_frame(pkl_folder)
     if not frames:
         raise FileNotFoundError(f"No *_pXX.pkl files found under {pkl_folder}")
@@ -100,61 +108,72 @@ def save_npz_per_frame(pkl_folder: Path, out_folder: Path) -> None:
             entries.append(load_pkl(p))
 
         def stack(key):
-            return np.stack([np.array(e[key]) for e in entries], axis=0)
+            values = []
+            for entry in entries:
+                val = entry.get(key)
+                if val is None:
+                    raise KeyError(f"Missing '{key}' in {entry.get('_path', 'entry')}")
+                values.append(np.array(val))
+            return np.stack(values, axis=0)
 
         verts = stack("verts")
-        contact = np.zeros((verts.shape[0], verts.shape[1]), dtype=np.float32)
 
-        # Match downstream naming / shapes (axis-angle)
+        frame_type = model_type
+        if frame_type == "auto":
+            frame_type = _infer_model_type(entries[0])
+
         root_pose = stack("global_orient").reshape(len(entries), -1, 3)
         body_pose = stack("body_pose").reshape(len(entries), -1, 3)
-        jaw_pose = stack("jaw_pose").reshape(len(entries), -1, 3)
-        leye_pose = stack("leye_pose").reshape(len(entries), -1, 3)
-        reye_pose = stack("reye_pose").reshape(len(entries), -1, 3)
-        lhand_pose = stack("left_hand_pose").reshape(len(entries), -1, 3)
-        rhand_pose = stack("right_hand_pose").reshape(len(entries), -1, 3)
         trans = stack("transl").reshape(len(entries), -1, 3)
 
-        np.savez(
-            out_folder / f"{frame_id}.npz",
-            betas=stack("betas")[..., :10],  # keep 10 betas
-            root_pose=root_pose[:, 0],      # (P,3)
-            body_pose=body_pose[:, :21],    # (P,21,3)
-            jaw_pose=jaw_pose[:, 0],        # (P,3)
-            leye_pose=leye_pose[:, 0],      # (P,3)
-            reye_pose=reye_pose[:, 0],      # (P,3)
-            lhand_pose=lhand_pose[:, :15],  # (P,15,3)
-            rhand_pose=rhand_pose[:, :15],  # (P,15,3)
-            trans=trans[:, 0],              # (P,3)
-            expression=stack("expression"),
-            joints_3d=stack("joints_3d"),
-            verts=verts,
-            contact=contact,
-        )
+        if frame_type == "smplx":
+            jaw_pose = stack("jaw_pose").reshape(len(entries), -1, 3)
+            leye_pose = stack("leye_pose").reshape(len(entries), -1, 3)
+            reye_pose = stack("reye_pose").reshape(len(entries), -1, 3)
+            lhand_pose = stack("left_hand_pose").reshape(len(entries), -1, 3)
+            rhand_pose = stack("right_hand_pose").reshape(len(entries), -1, 3)
+
+            np.savez(
+                out_folder / f"{frame_id}.npz",
+                betas=stack("betas")[..., :10],  # keep 10 betas
+                root_pose=root_pose[:, 0],      # (P,3)
+                body_pose=body_pose[:, :21],    # (P,21,3)
+                jaw_pose=jaw_pose[:, 0],        # (P,3)
+                leye_pose=leye_pose[:, 0],      # (P,3)
+                reye_pose=reye_pose[:, 0],      # (P,3)
+                lhand_pose=lhand_pose[:, :15],  # (P,15,3)
+                rhand_pose=rhand_pose[:, :15],  # (P,15,3)
+                trans=trans[:, 0],              # (P,3)
+                expression=stack("expression"),
+                joints_3d=stack("joints_3d"),
+                verts=verts,
+            )
+        elif frame_type == "smpl":
+            np.savez(
+                out_folder / f"{frame_id}.npz",
+                betas=stack("betas")[..., :10],  # keep 10 betas
+                root_pose=root_pose[:, 0],      # (P,3)
+                body_pose=body_pose[:, :23],    # (P,23,3)
+                trans=trans[:, 0],              # (P,3)
+                joints_3d=stack("joints_3d"),
+                verts=verts,
+            )
+        else:
+            raise ValueError(f"Unsupported model_type: {frame_type}. Expected 'smplx', 'smpl', or 'auto'.")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Pack SMPL-X pkl outputs to per-frame npz files."
-    )
-    parser.add_argument(
-        "--pkl-folder",
-        type=Path,
-        required=True,
-        help="Folder containing transfer_model output pkl files.",
-    )
-    parser.add_argument(
-        "--out-folder",
-        type=Path,
-        required=True,
-        help="Destination folder for npz files (e.g., the target smplx folder).",
-    )
-    return parser.parse_args()
+@dataclass
+class Args:
+    """CLI arguments for packing transfer_model outputs."""
+
+    pkl_folder: Path
+    out_folder: Path
+    model_type: str = "auto"
 
 
 def main() -> None:
-    args = parse_args()
-    save_npz_per_frame(args.pkl_folder, args.out_folder)
+    args = tyro.cli(Args, description="Pack transfer_model pkl outputs to per-frame npz files.")
+    save_npz_per_frame(args.pkl_folder, args.out_folder, args.model_type)
 
 
 if __name__ == "__main__":

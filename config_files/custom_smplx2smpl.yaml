@@ -11,8 +11,8 @@ edge_fitting:
 
 optim:
     type: 'lbfgs'
-    maxiters: 30
-    gtol: 1e-05
+    maxiters: 50
+    gtol: 1e-06
 
 body_model:
     model_type: "smpl"

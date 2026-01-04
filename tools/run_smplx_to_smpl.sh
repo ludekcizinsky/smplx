@@ -25,19 +25,19 @@ CONFIG="$ROOT/config_files/custom_smplx2smpl.yaml"
 cd "$ROOT"
 
 # Conversion steps from smplx to smpl:
-# echo "Exporting SMPL-X npz frames to obj meshes..."
-# conda activate thesis
-# python3 "$ROOT/tools/body_model_to_mesh.py" \
-  # --dataset-root "$SMPLX_DIR" \
-  # --obj-output "$OBJ_OUT" \
-  # --model-folder "/home/cizinsky/body_models" \
-  # --model-type smplx
+echo "Exporting SMPL-X npz frames to obj meshes..."
+conda activate thesis
+python3 "$ROOT/tools/body_model_to_mesh.py" \
+  --dataset-root "$SMPLX_DIR" \
+  --obj-output "$OBJ_OUT" \
+  --model-folder "/home/cizinsky/body_models" \
+  --model-type smplx
 
-# echo "Running SMPLX -> SMPL fitting..."
-# conda activate smplx
-# python -m transfer_model --exp-cfg "$CONFIG" --exp-opts batch_size=1000 use_cuda=True \
-  # datasets.mesh_folder.data_folder="$OBJ_OUT" \
-  # output_folder="$FITTING_OUT_DIR"
+echo "Running SMPLX -> SMPL fitting..."
+conda activate smplx
+python -m transfer_model --exp-cfg "$CONFIG" --exp-opts batch_size=1000 use_cuda=True \
+  datasets.mesh_folder.data_folder="$OBJ_OUT" \
+  output_folder="$FITTING_OUT_DIR"
 
 echo "Packing SMPL pkls into per-frame npz under smpl/..."
 conda activate smplx

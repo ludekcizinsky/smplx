@@ -2,7 +2,7 @@ datasets:
     mesh_folder:
         data_folder: ???
 deformation_transfer_path: ???
-mask_ids_fname: ''
+mask_ids_fname: ???
 output_folder: ???
 summary_steps: 100
 
@@ -12,15 +12,16 @@ edge_fitting:
 optim:
     type: 'lbfgs'
     maxiters: 50
-    gtol: 1e-06
+    gtol: 1e-05
 
 body_model:
-    model_type: "smpl"
+    model_type: "smplx"
     gender: "neutral"
-    ext: 'pkl'
     folder: "/home/cizinsky/body_models"
     use_compressed: False
     use_face_contour: True
-    smpl:
+    smplx:
         betas:
+            num: 10
+        expression:
             num: 10

@@ -234,12 +234,18 @@ def export_npz_to_obj(
 
     written = []
     for npz_path in tqdm(npz_files, desc="Exporting SMPL meshes"):
+        data_dict = None
+        computed_verts = False
         with np.load(npz_path, allow_pickle=True) as data:
             # Handle empty npz files by writing empty placeholders
             if not data.keys():
                 print(f"Skipping empty npz: {npz_path}, and writing empty placeholder to {placeholder_root}")
                 np.savez(placeholder_root / npz_path.name)
                 continue
+
+            has_verts = "verts" in data
+            if not has_verts:
+                data_dict = {key: data[key] for key in data.keys()}
 
             # Lazily create the model if needed
             if "verts" not in data and model is None:
@@ -257,6 +263,12 @@ def export_npz_to_obj(
 
             # Convert npz to vertices
             verts = _npz_to_vertices(data, model, model_type, model_use_pca)
+            if not has_verts:
+                data_dict["verts"] = verts
+                computed_verts = True
+
+        if computed_verts and data_dict is not None:
+            np.savez(npz_path, **data_dict)
 
         num_people = verts.shape[0]
         for person_idx in range(num_people):

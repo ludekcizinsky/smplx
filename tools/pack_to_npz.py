@@ -152,9 +152,9 @@ def save_npz_per_frame(pkl_folder: Path, out_folder: Path, model_type: str) -> N
             np.savez(
                 out_folder / f"{frame_id}.npz",
                 betas=stack("betas")[..., :10],  # keep 10 betas
-                root_pose=root_pose[:, 0],      # (P,3)
+                global_orient=root_pose[:, 0],      # (P,3)
                 body_pose=body_pose[:, :23],    # (P,23,3)
-                trans=trans[:, 0],              # (P,3)
+                transl=trans[:, 0],              # (P,3)
                 joints_3d=stack("joints_3d"),
                 verts=verts,
             )

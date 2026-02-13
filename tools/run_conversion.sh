@@ -60,3 +60,7 @@ python $ROOT/tools/pack_to_npz.py \
   --pkl-folder $FITTING_OUT_DIR \
   --out-folder $TGT_DIR \
   --model-type $TO_TYPE
+
+echo "Cleaning up intermediate conversion outputs..."
+rm -rf "$OBJ_OUT" "$FITTING_OUT_DIR"
+echo "Done. Kept only converted $TO_TYPE outputs under: $TGT_DIR"
